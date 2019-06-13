@@ -72,19 +72,33 @@ def LP_solver_split(left,other_cell_exp,data,current_splitting,weight_combo,num_
     #add objective function-----------------
     problem+=lpSum(all_errors),"total error"
     #----add constraints----------------
+    
     for i in range(num_sample):
         for j in range(num_gene):
             #get the total weight to be split
-            if left:
-                weight_to_split=current_splitting[i]
+            #TODO Deal with the situation where the other cell type is already split...
+            if isinstance(current_splitting[i],list):
+                split_before=True
             else:
-                weight_to_split=1-current_splitting[i]
+                split_before=False
+            if left:  #always split left before right
+                weight_to_split=current_splitting[i]
+            else:   #check if split before to retrieve weight differently
+                if split_before:
+                    weight_to_split=current_splitting[i][1]
+                else:
+                    weight_to_split=1-current_splitting[i]
             #get the weight of the cell type not split
-            fixing_weight=1-weight_to_split
+            if split_before:
+                left_weights=current_splitting[i][0]
+                offset=left_weights[0]*other_cell_exp[0][j]+left_weights[1]*other_cell_exp[1][j]
+            else:
+                fixing_weight=1-weight_to_split
+                offset=other_cell_exp[j]*fixing_weight
             #calculate the respective weights of new cell types
             weight_cell1=(weight_combo[i])*weight_to_split
             weight_cell2=(1-weight_combo[i])*weight_to_split
-            offset=other_cell_exp[j]*fixing_weight
+            
             problem+=expression_vars[0][j]*weight_cell1+expression_vars[1][j]*weight_cell2+offset-data[j][i]<=error_vars[i][j]
             problem+=expression_vars[0][j]*weight_cell1+expression_vars[1][j]*weight_cell2+offset-data[j][i]>=-error_vars[i][j]
     problem.solve()
@@ -108,13 +122,13 @@ def gridSearchCellTypes(num_celltype=2):
     tumor_1=data.filter(regex="CG118")
     tumor_2=data.filter(regex="CG163")
     tumor_3=data.filter(regex="CG565")
-    tumor_1_result=oneTumor(tumor_1)
-    # tumor_2_result=oneTumor(tumor_2)
-    # tumor_3_result=oneTumor(tumor_3)
+    # oneTumor("CG118",tumor_1)
+    oneTumor("CG163",tumor_2)
+    oneTumor("CG565",tumor_3)
 
 
 
-def oneTumor(data,num_celltype=2):
+def oneTumor(tumor_name, data,num_celltype=2):
     sample_list=data.columns.values
     data=data.values
     num_gene=data.shape[0]
@@ -134,37 +148,84 @@ def oneTumor(data,num_celltype=2):
     print("The best objective is: %8.3f"% best_objective)
     best_cell_right=best_solution[1]
     best_cell_left=best_solution[0]
-    #try splitting on the left cell type
+    #try splitting on the left cell type------------------
     split_left=split_current(True,best_cell_right,data,best_combo,weight_combos,sample_list, num_gene)
-    split_right=split_current(False,best_cell_left,data,best_combo,weight_combos,sample_list, num_gene)
+    
     if split_left[0]<best_objective:
         print("YAYYY")
         print("The best objective via splitting on left is: %8.3f"% split_left[0])
-        
+
+        #Update the best objective
         best_objective=split_left[0]
+
         #update cell type expression vector
-        #put the newly found vectors on the left, keep the old right vector
+        #put the newly found vectors on the left, keep the old right vector, in the form  ((l1,l2),l3)
         best_solution=(split_left[2],best_cell_right)
 
         #update splitting weights
         best_splitting=split_left[1]   #the best splitting within the firt component
+        #a list of lists, each sublist correspond to a sample, has the form [[weight1,weight2],weight3]
         best_combo=[ [ [best_splitting[i]*best_combo[i],(1-best_splitting[i])*best_combo[i]] ,1-best_combo[i]] for i in range(num_samples)]
     
-    #try splitting on the right cell type
-    # best_cell_left=best_solution[0]
-    # split_right=split_current(best_cell_left,data, best_combo, weight_combos, sample_list, num_gene)
+    # try splitting on the right cell type-----------------
+    best_cell_left=best_solution[0]    
+    split_right=split_current(False, best_cell_left,data, best_combo, weight_combos, sample_list, num_gene)
+
+    if split_right[0]<best_objective:
+        print("Yayy")
+        print("The best objective via splitting on left is: %8.3f"% split_right[0])
+         #Update the best objective
+        best_objective=split_right[0]
+
+        #update cell type expression vector
+        #put the newly found vectors on the right, keep the old right vector, in the form  ((l1,l2),(l3,l4)) or (l1,(l2,l3))
+        best_solution=(best_cell_left,split_right[2])
+
+        #update splitting weights
+        best_splitting=split_right[1]   #the best splitting within the second component
+        #a list of lists, each sublist correspond to a sample, has the form [[weight1,weight2],weight3] or [[w1,w2],[w3,w4]]
+        best_combo=[ [ best_combo[i][0] ,[ best_combo[i][1]*best_splitting[i],  best_combo[i][1]*(1-best_splitting[i])]] for i in range(num_samples)]
+    
+
+    printCellTypeExpressions(tumor_name, best_solution)
+    printSampleWeights(tumor_name, best_combo, sample_list)
+    
+
+def printCellTypeExpressions(tumor_name, best_solution):
+    def flatten(vecs):
+        copy=vecs
+        if isinstance(copy,list):
+            return [copy]
+        else:
+            first=flatten(vecs[0])
+            first.extend(flatten(vecs[1]))
+            return first
+    flattened_vecs=flatten(best_solution)
+    vec_array=np.array(flattened_vecs)
+    vec_array=vec_array.transpose()
+    vecs=pd.DataFrame(vec_array, columns=["cell type "+str(i+1) for i in range(vec_array.shape[1])])
+    with pd.ExcelWriter('data/results/'+tumor_name+'_inferred_cellTyle_expressions.xlsx') as writer:
+        vecs.to_excel(writer, index=False)
+
+def printSampleWeights(tumor_name, best_combo, sample_list):
+    def flatten_sample_weight(weights):
+        copy=weights
+        if not isinstance(copy,list):
+            return [copy]
+        else:
+            first=flatten_sample_weight(copy[0])
+            first.extend(flatten_sample_weight(copy[1]))
+            return first
+    
+    flattened=np.array([flatten_sample_weight(x) for x in  best_combo])
+    df=pd.DataFrame(flattened,index=sample_list, columns=["cell type "+str(i+1) for i in range(flattened.shape[1])])
+    with pd.ExcelWriter('data/results/'+tumor_name+'_inferred_sample_proportions.xlsx') as writer:
+        df.to_excel(writer, index=False)
 
 
 
-
-
-        
 
     
-    print(best_combo)
-    return (best_combo,best_objective)
-
-
 def split_current(left,other_cell_exp,data, current_splitting, weight_combos, sample_list,num_gene):
     """
     other_cell_exp: the expressino vector(list )of the cell type not to be split
