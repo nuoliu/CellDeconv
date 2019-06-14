@@ -170,12 +170,15 @@ def gridSearchCellTypes(num_celltype=2):
     tumor_2=data.filter(regex="CG163")
     tumor_3=data.filter(regex="CG565")
     # oneTumor("CG118",tumor_1, gene_list)
-    # oneTumor("CG163",tumor_2,gene_list)
-    oneTumor("CG565",tumor_3,gene_list)
+    oneTumor("CG163",tumor_2,gene_list)
+    # oneTumor("CG565",tumor_3,gene_list)
 
 
 
 def oneTumor(tumor_name, data,gene_list,num_celltype=2):
+    """
+    The actual function that does the grid search and cell type splits
+    """
     sample_list=data.columns.values
     data=data.values
     num_gene=data.shape[0]
@@ -198,7 +201,7 @@ def oneTumor(tumor_name, data,gene_list,num_celltype=2):
                 best_solution=None
                 #try all different weight assignments 
                 for index,weight_combo in enumerate(weight_combos):
-                    # print("Trying the %dth combination of weights"%(index+1))
+                    print("Trying the %dth combination of weights"%(index+1))
                     objective, cell_1_exp, cell_2_exp=LP_solver(weight_combo,num_celltype,data,sample_list,num_gene,leaf, tree)
                     if objective<best_objective:
                         best_objective=objective
@@ -206,9 +209,23 @@ def oneTumor(tumor_name, data,gene_list,num_celltype=2):
                         best_solution=(cell_1_exp,cell_2_exp)
                 #whether to use this splitting
                 current_obj=tree.getObjective()
-                if (current_obj==float('inf')) or ((best_objective<current_obj) and ((current_obj-best_objective)/float(current_obj)>0.05)):
+                if (current_obj==float('inf')) or isImprove(best_objective,current_obj,0.1):
                     #if there is more than 10% decrease in error
                     #adopt this split
+                    #TODO fine tune the splitting we found that is good
+                    for i in range(num_samples):
+                        #try fine tune the weight in each sample
+                        new_combo=refinedGrid(best_combo,i)
+                        for combo in new_combo:
+                            #try making the weight smaller or larger
+                            print("Trying rid for %dth sample"%(i+1))
+                            objective, cell_1_exp, cell_2_exp=LP_solver(combo,num_celltype,data,sample_list,num_gene,leaf, tree)
+                            if objective<best_objective:
+                                best_objective=objective
+                                best_combo=combo
+                                best_solution=(cell_1_exp,cell_2_exp)
+
+
                     tree.setObjective(best_objective)
                     leftChild_expr=best_solution[0]
                     rightChild_expr=best_solution[1]
@@ -236,6 +253,11 @@ def oneTumor(tumor_name, data,gene_list,num_celltype=2):
     printCellTypeExpressions(tumor_name, tree,gene_list)
     printSampleWeights(tumor_name, tree, sample_list)
     
+def isImprove(newObj, oldObj,thr):
+    """
+    see if the new objective count as an improvement from the old one
+    """
+    return (newObj<oldObj) and ((oldObj-newObj)/float(oldObj)>thr)
 
 def printCellTypeExpressions(tumor_name, tree,gene_list):
     celltypes=tree.getLeaves()
@@ -259,26 +281,45 @@ def printSampleWeights(tumor_name, tree, sample_list):
         df.to_excel(writer, index=False)
 
 
-
-
-
-
 def generate_TwoComponentWeights(num_samples):
-    l=[[float(1/3)],[float(2/3)]]
+    l=[[float(1/4)],[float(3/4)]]
     for i in range(num_samples-1):
         l_new=[]
         for element in l:
            
-            new_1=element+[float(1/3)]
+            new_1=element+[float(1/4)]
             l_new.append(new_1)
      
-            new_2=element+[float(2/3)]
+            new_2=element+[float(3/4)]
             l_new.append(new_2)
    
         l=l_new
     return l
 
+def refinedGrid(best_combo,sample_ind):
+    """
+    Input
+    ---------------
+    best_combo:         a list where each element tells the relative weight 
+                        assigned to cell 1 among 2 cell types in each sample
+                        example: [0.25, 0.75, 0.75, 0.25, 0.25]
 
+    Output
+    ---------------
+    refined_combos:     2 modified lists with the element at sample_ind decreased/increased
+    """
+    def finer_weight(original_weight):
+        if original_weight<0.5:
+            return [0.5*original_weight,1.5*original_weight]
+        else:
+            rest=1-original_weight
+            return [original_weight-0.5*rest,original_weight+0.5*rest]
+    #for each sample
+    l1=best_combo
+    l2=best_combo
+    l1[sample_ind]=finer_weight(best_combo[sample_ind])[0]
+    l2[sample_ind]=finer_weight(best_combo[sample_ind])[1]
+    return (l1,l2)
 
 
 def main():
