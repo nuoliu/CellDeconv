@@ -1,0 +1,10 @@
+patient3, 0.6
+The resulting objective is 1472.479
+patient3, 0.8
+The resulting objective is 1402.361
+patient3, 1.0
+The resulting objective is 1338.094
+patient3, 1.2
+The resulting objective is 1284.570
+patient3, 1.4
+The resulting objective is 1248.888
