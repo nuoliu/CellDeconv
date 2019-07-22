@@ -1,6 +1,9 @@
 # CellDeconv
 Using a hierachical linear programming approach to breakdown mixture tumor sample expressin profile into multiple cell type expressions.
 
+Author: Nuo (Ivy) Liu, Harvey Mudd College Class of 2020, during the 2019 SMART program at BCM in the lab of Dr. Pavel Sumazin.
+
+
 ## Main programs:
 _lp.py_: program that runs the linear programming on input mixture samples, generate three output files: inferred cell type expression (xlsx), all cell type expressions (include internal nodes) (xlsx), and composition/proportion of each inferred cell type in each sample (xlsx). Alpha is a float value around 1 that constrains how many cell types can be produced compared to the number of samples. The higher the alpha, the more number of cell types possible, try testing between 0.4 to 1.6. 
 
