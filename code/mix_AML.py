@@ -7,8 +7,8 @@ from sklearn.preprocessing import normalize
 from scipy.stats import variation
 def produce_mixture(out_dir, num_sample):
 
-    expression_data=pd.read_excel("data/AML/AML328-D113_expression.xlsx")
-    clustered_sample=pd.read_excel("data/AML/AML328-D113_selectedSamples.xlsx")
+    expression_data=pd.read_excel("../data/AML/AML328-D113_expression.xlsx")
+    clustered_sample=pd.read_excel("../data/AML/AML328-D113_selectedSamples.xlsx")
     num_genes=expression_data.values.shape[0]
     gene_list=expression_data.loc[:,"Gene"].values
     clusterMembers={}
