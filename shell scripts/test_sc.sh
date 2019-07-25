@@ -1,6 +1,6 @@
 #!/bin/sh
 
-
+#change to current working directory
 cd "/home/nl2/SMART_2019/CellDeconv"
 
 for SAMP_SIZE in 11 13 15
