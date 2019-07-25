@@ -1,6 +1,11 @@
 """
 Solves linear programming for the deconvolution of RNA-seq expressions
 
+NOTE
+The input excel file must have the following format:
+first column with header "geneSymbol" and each entry is a gene symbol
+must have some header for other columns (sample vectors)
+
 """
 from pulp import *
 import pandas as pd
@@ -80,6 +85,8 @@ class CellTree:
         leaf.left=leftChild
         
         leaf.right=rightChild
+        #Uncomment the following to print the lineage
+
         # if leaf.getLeftChild() is not None:
         #     print("Node %d has children Node %d and Node %d"%(leaf.getNodeNumber(),num_Nodes+1,num_Nodes+2))
         self.addLeaf(leftChild)
@@ -173,25 +180,13 @@ def LP_solver(weight_combo,data,sample_list,num_gene,leaf_to_split, tree,num_cel
         cell_1_exp.append(expression_vars[0][i].varValue)
         cell_2_exp.append(expression_vars[1][i].varValue)
 
-
+    #return the final objective from the linear programming, i.e. the total error, the two new expression vectors
     return value(decon_problem.objective),np.array(cell_1_exp), np.array(cell_2_exp)
 
 
 
 
 def gridSearchCellTypes(input_fn, out_dir, fine_grid=True, alpha=1.0):
-    # data=pd.read_excel("data/tumor_filtered_genes.xlsx")
-    # #drop TAN samples
-    # data.drop(list(data.filter(regex = 'TAN')), axis = 1, inplace = True)
-    # #get rid of the annotation and stats columns
-    # gene_list=data.loc[:,"geneSymbol"].values
-    # data=data.iloc[:,4:-2]
-    # tumor_1=data.filter(regex="CG118")
-    # tumor_2=data.filter(regex="CG163")
-    # tumor_3=data.filter(regex="CG565")
-    # # oneTumor("CG118",tumor_1,gene_list, True)
-    # # oneTumor("CG163",tumor_2,gene_list,True)
-    # oneTumor("CG565",tumor_3,gene_list, True)
 
     data=pd.read_excel(input_fn)
     gene_list=data.loc[:,"geneSymbol"].values
@@ -368,10 +363,11 @@ def refinedGrid(best_combo,sample_ind):
     best_combo:         a list where each element tells the relative weight 
                         assigned to cell 1 among 2 cell types in each sample
                         example: [0.25, 0.75, 0.75, 0.25, 0.25]
+    sample_ind:         The sample index that need to have weights adjusted
 
     Output
     ---------------
-    refined_combos:     2 modified lists with the element at sample_ind decreased/increased
+    l1, l2:     2 modified lists with the element at sample_ind decreased/increased
     """
     def finer_weight(original_weight):
         """
@@ -399,6 +395,10 @@ def refinedGrid(best_combo,sample_ind):
     return (l1,l2)
 
 def printTree(tree, gene_list, tumor_name, out_dir):
+    """
+    Just a helper function for outputing all the nodes in the tree, i.e all the expression
+    vectors
+    """
     all_nodes=tree.getAllNode()
     num_nodes=len(all_nodes)
     all_exp=[]
